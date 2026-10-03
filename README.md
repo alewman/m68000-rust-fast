@@ -35,11 +35,13 @@ alternately, both sides see the same load. The ratio is the result.
 
 | Commit | Change | Replays (min over layouts) | Synthetic |
 | --- | --- | ---: | ---: |
-| `60e7567` | baseline: the transcription, the build-time opcode table, the lean bench host | 0.462 s, 114.5 M instr/s | -- |
+| `60e7567` | baseline: the transcription and the build-time opcode table (0.462 s on the first lean host; 0.382 s on the current one) | -- | -- |
 | `1b8dbbb` | `step()`: one combined test for the common case, the rest `#[cold]` | x1.110 | (not measured: the synthetic total line came after) |
 | `0ce1db4` | inline the addressing-mode helpers, the sized read and the refills | x1.099 | x1.051 |
 | `67c0972` | MOVE and TST specialized on the source addressing kind (const generic) | x1.082 | x1.009 |
-| | **at `67c0972` against the baseline** | **x1.314: 0.354 s, 149 M instr/s** | x1.060 against `ef71d07` |
+| `9b443fe` | bench host: one device-window compare and a fixed-size memory (a harness change: every row is re-measurable with the same harness, since `ab.sh` copies the current bench into the base) | at this commit 0.287 s, 184 M instr/s; against `60e7567` with this harness x1.313 | x1.207 against `60e7567` |
+| `ec30440` | MOVE specialized on its size as well as its source kind (36 instances) | x1.054 | x1.009 |
+| | **at `ec30440` against `60e7567`, same harness** | **x1.384: 0.382 s to 0.276 s, 191 M instr/s** | **x1.217** |
 
 Measured and not kept (each A/B against the commit it would have followed):
 
@@ -51,6 +53,8 @@ Measured and not kept (each A/B against the commit it would have followed):
 | inlining `jump`, `read_program_word` and the bus read helpers as well | x0.982 | x0.959 | slower |
 | ADD/SUB/AND/OR, CMP, CMPI, ADDQ/SUBQ, the unary group, MOVEA, LEA specialized like MOVE | x0.972 | x1.017 | slower on the main measure (code growth) |
 | fat LTO, one codegen unit | x0.972 | x0.951 | slower |
+| `execute()` inlined into `step()` | x0.909 | x0.967 | slower |
+| TST specialized on size as well as kind | x0.968 | x1.009 | slower on the main measure |
 
 Through the full conformance host (bus-error and device range scans and the
 access log on every access, a state capture per boundary) the same replays
