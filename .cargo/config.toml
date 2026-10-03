@@ -1,0 +1,11 @@
+# Align branch-target basic blocks to 64 bytes. The dispatch loop's speed
+# depends on where the linker happens to place its hot blocks (see the
+# README's "Speed" section); this makes the placement deliberate and has
+# been the best or equal-best layout on every measured commit. Code size
+# grows about 6%. No instruction-set extension is enabled: `target-cpu=native`
+# was measured at -8% to +2% depending on layout and is not used.
+#
+# scripts/bench.sh also builds with these flags overridden ("noalign" and
+# "nf5") so a change is still judged across layouts, not on one.
+[build]
+rustflags = ["-C", "llvm-args=-align-all-nofallthru-blocks=6"]

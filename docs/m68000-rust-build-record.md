@@ -1,6 +1,6 @@
 # Build record
 
-What happened when [handoff-brief.md](handoff-brief.md) was run, in order,
+What happened when [m68000-rust-handoff-brief.md](m68000-rust-handoff-brief.md) was run, in order,
 with the numbers. All on 2026-10-02, local time (PDT), on an i9-13900K
 shared with other people's jobs; times come from the commit log and run
 logs.

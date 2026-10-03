@@ -6,22 +6,30 @@
 //! with `m68000_python/_core.py`, `_ea.py`, `_flags.py`, and so on (the
 //! reference's mixins are `impl` blocks here). `trace` and `conformance`
 //! implement the trace schema and the conformance kit (`docs/trace-schema.md`
-//! and `docs/conformance.md` in m68000-python).
+//! and `docs/conformance.md` in m68000-python); they need `std` and sit
+//! behind the default `std` feature, so `--no-default-features` builds the
+//! core alone, `no_std`.
+
+#![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod alu;
 pub mod bcd;
 pub mod bits;
+#[cfg(feature = "std")]
 pub mod conformance;
 pub mod control;
 pub mod core;
 pub mod cpu;
 pub mod dispatch;
 pub mod ea;
+pub mod ea_kinds;
 pub mod flags;
 pub mod loads;
+pub mod opcode_map;
 pub mod shifts;
 pub mod state;
 pub mod system;
+#[cfg(feature = "std")]
 pub mod trace;
 
 pub use crate::core::{Bus, BusError, Cycle, AUTOVECTOR, M68000, SPURIOUS};

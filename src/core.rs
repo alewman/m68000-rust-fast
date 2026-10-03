@@ -224,7 +224,7 @@ impl<B: Bus> M68000<B> {
     pub(crate) fn set_sr_internal(&mut self, value: u16) {
         let value = value & SR_BITS;
         if (value ^ self.sr) & S != 0 {
-            std::mem::swap(&mut self.r[15], &mut self.other_sp);
+            ::core::mem::swap(&mut self.r[15], &mut self.other_sp);
         }
         self.sr = value;
     }

@@ -82,6 +82,7 @@ pub const STATE_FIELDS: [&str; 14] = [
 
 impl CpuState {
     /// The checks `CPUState.__post_init__` makes that the Rust types do not.
+    #[cfg(feature = "std")]
     pub fn validate(&self) -> Result<(), String> {
         if self.pc & 1 != 0 {
             return Err("pc must be even: instructions live at even addresses".into());

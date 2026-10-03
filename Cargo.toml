@@ -1,19 +1,44 @@
 [package]
-name = "m68000-rust"
+name = "m68000-rust-fast"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
-description = "A Rust MC68000 instruction core transcribed from, and proven equivalent to, m68000-python"
+description = "A fast Rust MC68000 instruction core, ladder-gated: provably equivalent to m68000-python at every boundary"
 license = "MIT"
-repository = "https://github.com/alewman/m68000-rust"
+repository = "https://github.com/alewman/m68000-rust-fast"
 publish = false
 
 [lib]
 name = "m68000_rust"
 
+[features]
+default = ["std"]
+# The trace producer, the conformance host and the binaries.
+std = ["dep:serde", "dep:serde_json"]
+
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
 
 [profile.release]
 debug = 1
+
+[[bin]]
+name = "m68k-trace"
+required-features = ["std"]
+
+[[bin]]
+name = "m68k-vectors"
+required-features = ["std"]
+
+[[bin]]
+name = "m68k-bcd"
+required-features = ["std"]
+
+[[bin]]
+name = "m68k-bench"
+required-features = ["std"]
+
+[[bin]]
+name = "m68k-replay-bench"
+required-features = ["std"]
