@@ -42,3 +42,14 @@ to 17 during the session). The commit messages carry each measurement.
 - `ab.sh` once timed stale binaries after a failed build; it now stops on a
   build failure, and those numbers were discarded.
 - Final: x1.384 replays, x1.217 synthetic against `60e7567`, same harness.
+
+## 2026-10-03: ready for phones, v0.1.0
+
+- The user will test on phones and keep this core unless it is too slow.
+  The core builds `no_std` for wasm32; `scripts/wasm-check.sh` runs the BCD
+  rung and rungs 1 and 5 inside WebAssembly under Node: all agree, 23 of 23
+  manifests, about 112 M instr/s. A planted Bcc timing fault fails it; a
+  planted word-ADD carry fault does not (no manifest has such an ADD;
+  rung 2 covers it natively).
+- Tagged `v0.1.0`: the core is `ec30440`'s, with the whole native ladder
+  clean on it.

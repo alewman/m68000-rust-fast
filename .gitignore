@@ -2,3 +2,4 @@
 *.jsonl
 !/tests/data/**/*.jsonl
 /external/
+/wasm-check/target/

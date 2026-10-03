@@ -131,6 +131,25 @@ scripts/fetch_680x0.sh               # SingleStepTests/680x0 (68000/v1) at the p
 scripts/rung6.sh
 ```
 
+## On WebAssembly (phones and browsers)
+
+The core builds `no_std` for `wasm32-unknown-unknown`, and
+`scripts/wasm-check.sh` proves it there rather than assuming the native
+results carry over: it builds `wasm-check/` (a 0.9 MB module with every
+manifest and reference trace of `tests/data` built in) and runs it under
+Node. Inside WebAssembly, at `v0.1.0` (2026-10-03):
+
+| Check | Result |
+| --- | --- |
+| Rung 4: ABCD, SBCD, NBCD over every input against flamewing's hardware-verified table (SHA-256) | all 525,312 inputs agree |
+| Rungs 1 and 5: the 3 example and 20 interrupt manifests, each record against the reference trace | 23 of 23 match |
+| The reference's "base" benchmark loop | about 112 M instr/s under Node 22 on the i9 (native: 134 M) |
+
+Two extra clocks on every taken Bcc make `flags-and-branches` fail and the
+script exit 1, so the check bites. Rungs 2, 3 and 6 run natively only; the
+module runs the same source. A phone will be slower than this desktop; how
+much is what testing there will show.
+
 ## Using the core
 
 ```rust
@@ -192,6 +211,7 @@ divergence between the two cores was found at any rung.
 - `m68k-bcd [table]`: the BCD table check (rung 4).
 - `m68k-680x0 <dir>`: the 680x0 corpus classified as the reference classifies it (rung 6).
 - `m68k-bench`: the reference's four benchmark workloads.
+- `scripts/wasm-check.sh`: the WebAssembly check above.
 - `m68k-replay-bench [--check]`: the replays on a lean host, the speed
   measure; `--check` requires the same counts as the conformance host.
 
