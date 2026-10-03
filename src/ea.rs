@@ -19,6 +19,31 @@ use crate::core::{Bus, GroupZero, M68000, MASK};
 
 pub use crate::ea_kinds::*;
 
+/// Call `$call::<KIND>` with the run-time `$kind` as a const generic, so a
+/// handler specialized on its addressing kind is monomorphized once per kind
+/// and its mode decode folds away. `$kind` is never NONE: the opcode map
+/// sends no word with an invalid EA to a handler that specializes.
+macro_rules! by_kind {
+    ($kind:expr, $call:ident, $self:ident, $($argument:expr),*) => {
+        match $kind {
+            0 => $self.$call::<0>($($argument),*),
+            1 => $self.$call::<1>($($argument),*),
+            2 => $self.$call::<2>($($argument),*),
+            3 => $self.$call::<3>($($argument),*),
+            4 => $self.$call::<4>($($argument),*),
+            5 => $self.$call::<5>($($argument),*),
+            6 => $self.$call::<6>($($argument),*),
+            7 => $self.$call::<7>($($argument),*),
+            8 => $self.$call::<8>($($argument),*),
+            9 => $self.$call::<9>($($argument),*),
+            10 => $self.$call::<10>($($argument),*),
+            11 => $self.$call::<11>($($argument),*),
+            _ => unreachable!("no addressing kind"),
+        }
+    };
+}
+pub(crate) use by_kind;
+
 pub fn sign_extend_8(value: u32) -> i32 {
     i32::from(value as u8 as i8)
 }

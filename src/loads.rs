@@ -9,8 +9,8 @@
 
 use crate::core::{Bus, GroupZero, Step, M68000};
 use crate::ea::{
-    ea_kind, sign_extend_16, sign_extend_8, word_to_long, ABSL, ABSW, AN, DISP, DN, EA_KIND, IMM,
-    IND, INDEX, PCDISP, PCINDEX, POSTINC, PREDEC,
+    by_kind, ea_kind, sign_extend_16, sign_extend_8, word_to_long, ABSL, ABSW, AN, DISP, DN,
+    EA_KIND, IMM, IND, INDEX, PCDISP, PCINDEX, POSTINC, PREDEC,
 };
 
 /// MOVE's size field, bits 13-12 (PRM 4, MOVE): 01 byte, 11 word, 10 long.
@@ -31,8 +31,14 @@ impl<B: Bus> M68000<B> {
     /// fault. WinUAE run agrees except that it leaves An alone when a word
     /// (An)+ faults: contested, the core follows the gate.
     pub(crate) fn op_move(&mut self, opcode: u16) -> Step {
+        by_kind!(ea_kind(opcode), op_move_from, self, opcode)
+    }
+
+    /// MOVE with its source kind known at compile time (`op_move`'s body).
+    #[inline(always)]
+    fn op_move_from<const SOURCE: u8>(&mut self, opcode: u16) -> Step {
         let size = move_size(opcode);
-        let source = ea_kind(opcode);
+        let source = SOURCE;
         let value = self.ea_read(source, usize::from(opcode & 7), size)?;
         let kind = EA_KIND[usize::from(((opcode >> 3) & 0x38) | ((opcode >> 9) & 7))];
         let register = usize::from((opcode >> 9) & 7);
