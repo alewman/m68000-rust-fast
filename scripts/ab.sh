@@ -9,13 +9,17 @@
 # benchmarks/compare_revisions.py, the same reasoning.)
 #
 # Usage: scripts/ab.sh [BASE (default HEAD)]
-#   env: CPU (default 4), ROUNDS (default 7), LAYOUTS (default "default noalign nf5")
+#   env: CPU (default 4), ROUNDS (default 7), LAYOUTS (default "default noalign nf5"),
+#        BENCH (replay, the default, or synthetic: m68k-bench's four workloads)
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 BASE=${1:-HEAD}
 CPU=${CPU:-4}
 ROUNDS=${ROUNDS:-7}
 LAYOUTS=${LAYOUTS:-"default noalign nf5"}
+BENCH=${BENCH:-replay}
+BIN=m68k-replay-bench
+[ "$BENCH" = synthetic ] && BIN=m68k-bench
 declare -A FLAGS=(
     [default]=""
     [noalign]="-C opt-level=3"
@@ -32,15 +36,15 @@ build() { # tree layout -> binary path
     local tree=$1 layout=$2 target
     target="$tree/target/ab-$layout"
     if [ "$layout" = default ]; then
-        CARGO_TARGET_DIR="$target" cargo build --release -q --manifest-path "$tree/Cargo.toml" --bin m68k-replay-bench
+        CARGO_TARGET_DIR="$target" cargo build --release -q --manifest-path "$tree/Cargo.toml" --bin "$BIN"
     else
         RUSTFLAGS="${FLAGS[$layout]}" CARGO_TARGET_DIR="$target" \
-            cargo build --release -q --manifest-path "$tree/Cargo.toml" --bin m68k-replay-bench
+            cargo build --release -q --manifest-path "$tree/Cargo.toml" --bin "$BIN"
     fi
-    echo "$target/release/m68k-replay-bench"
+    echo "$target/release/$BIN"
 }
-seconds() { sed -E 's/.* clocks, ([0-9.]+) s,.*/\1/'; }
-echo "base $rev vs working tree, cpu $CPU, $ROUNDS rounds, load $(cut -d' ' -f1 /proc/loadavg)"
+seconds() { if [ "$BENCH" = synthetic ]; then sed -nE 's/^total .* ([0-9.]+) s$/\1/p'; else sed -E 's/.* clocks, ([0-9.]+) s,.*/\1/'; fi; }
+echo "$BENCH: base $rev vs working tree, cpu $CPU, $ROUNDS rounds, load $(cut -d' ' -f1 /proc/loadavg)"
 best_base_all=""; best_new_all=""
 for layout in $LAYOUTS; do
     a=$(build "$BASE_TREE" "$layout")
@@ -49,7 +53,11 @@ for layout in $LAYOUTS; do
     for _ in $(seq "$ROUNDS"); do
         for side in a b; do
             bin=$a; [ $side = b ] && bin=$b
-            t=$(taskset -c "$CPU" "$bin" --repeat 1 "$ROOT/external/replay-genesis/manifest.json" "$ROOT/external/replay-altbeast/manifest.json" | seconds)
+            if [ "$BENCH" = synthetic ]; then
+                t=$(taskset -c "$CPU" "$bin" 5000000 1 | seconds)
+            else
+                t=$(taskset -c "$CPU" "$bin" --repeat 1 "$ROOT/external/replay-genesis/manifest.json" "$ROOT/external/replay-altbeast/manifest.json" | seconds)
+            fi
             if [ $side = a ]; then
                 [ -z "$best_a" ] || awk "BEGIN{exit !($t < $best_a)}" && best_a=$t
             else

@@ -112,6 +112,7 @@ fn main() {
     let mut arguments = std::env::args().skip(1);
     let count: u64 = arguments.next().map_or(50_000_000, |a| a.parse().unwrap());
     let samples: usize = arguments.next().map_or(5, |a| a.parse().unwrap());
+    let (mut total_instructions, mut total_seconds) = (0u64, 0f64);
     for (name, program) in [
         ("base", BASE),
         ("memory", MEMORY),
@@ -132,10 +133,14 @@ fn main() {
         }
         times.sort_by(f64::total_cmp);
         let median = times[times.len() / 2];
+        total_instructions += count;
+        total_seconds += times[0];
         println!(
             "{name:11} {:8.1} M instr/s  {:8.1} emulated MHz",
             count as f64 / median / 1e6,
             clocks as f64 / median / 1e6
         );
     }
+    // The sum of each workload's best sample: the figure scripts/ab.sh compares.
+    println!("total {total_instructions} instructions, best samples {total_seconds:.3} s");
 }
