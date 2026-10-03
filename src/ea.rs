@@ -67,6 +67,7 @@ impl<B: Bus> M68000<B> {
     ///
     /// The standard source-operand sequence: the one TST, CMP, ADD <ea>,Dn
     /// and the read half of a read-modify-write use.
+    #[inline(always)]
     pub(crate) fn ea_address(
         &mut self,
         kind: u8,
@@ -117,6 +118,7 @@ impl<B: Bus> M68000<B> {
     }
 
     /// Fetch a source operand of any kind (UM Table 8-1).
+    #[inline(always)]
     pub(crate) fn ea_read(
         &mut self,
         kind: u8,
@@ -140,6 +142,7 @@ impl<B: Bus> M68000<B> {
     /// Address and value of a memory operand: the read half of every access.
     ///
     /// PC-relative operands are read in program space (FC 2/6, UM Table 3-2).
+    #[inline(always)]
     pub(crate) fn ea_fetch(
         &mut self,
         kind: u8,

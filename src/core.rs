@@ -346,6 +346,7 @@ impl<B: Bus> M68000<B> {
         self.write_word(address, value >> 16)
     }
 
+    #[inline(always)]
     pub(crate) fn read(&mut self, size: usize, address: u32) -> Result<u32, GroupZero> {
         if size == 2 {
             return self.read_word(address);
@@ -421,6 +422,7 @@ impl<B: Bus> M68000<B> {
     // refills add 2.
 
     /// Take the extension word waiting in IRC and refill IRC from pc.
+    #[inline(always)]
     pub(crate) fn extension(&mut self) -> Result<u32, GroupZero> {
         let value = u32::from(self.irc);
         let address = self.pc;
@@ -442,6 +444,7 @@ impl<B: Bus> M68000<B> {
     ///
     /// The opcode of the next instruction is then in IR and its first
     /// extension word in IRC (UM "Prefetch"; corpus `prefetch` pair).
+    #[inline(always)]
     pub(crate) fn prefetch(&mut self) -> Step {
         let address = self.pc;
         self.fault_pc = address;
