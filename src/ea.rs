@@ -44,6 +44,28 @@ macro_rules! by_kind {
 }
 pub(crate) use by_kind;
 
+/// `by_kind!` with a second const argument after the kind.
+macro_rules! by_kind_with {
+    ($kind:expr, $extra:expr, $call:ident, $self:ident, $($argument:expr),*) => {
+        match $kind {
+            0 => $self.$call::<0, $extra>($($argument),*),
+            1 => $self.$call::<1, $extra>($($argument),*),
+            2 => $self.$call::<2, $extra>($($argument),*),
+            3 => $self.$call::<3, $extra>($($argument),*),
+            4 => $self.$call::<4, $extra>($($argument),*),
+            5 => $self.$call::<5, $extra>($($argument),*),
+            6 => $self.$call::<6, $extra>($($argument),*),
+            7 => $self.$call::<7, $extra>($($argument),*),
+            8 => $self.$call::<8, $extra>($($argument),*),
+            9 => $self.$call::<9, $extra>($($argument),*),
+            10 => $self.$call::<10, $extra>($($argument),*),
+            11 => $self.$call::<11, $extra>($($argument),*),
+            _ => unreachable!("no addressing kind"),
+        }
+    };
+}
+pub(crate) use by_kind_with;
+
 pub fn sign_extend_8(value: u32) -> i32 {
     i32::from(value as u8 as i8)
 }

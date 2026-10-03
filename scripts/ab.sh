@@ -40,10 +40,11 @@ build() { # tree layout -> binary path
     local tree=$1 layout=$2 target
     target="$tree/target/ab-$layout"
     if [ "$layout" = default ]; then
-        CARGO_TARGET_DIR="$target" cargo build --release -q --manifest-path "$tree/Cargo.toml" --bin "$BIN"
+        CARGO_TARGET_DIR="$target" cargo build --release -q --manifest-path "$tree/Cargo.toml" --bin "$BIN" >&2 \
+            || return 1
     else
         RUSTFLAGS="${FLAGS[$layout]}" CARGO_TARGET_DIR="$target" \
-            cargo build --release -q --manifest-path "$tree/Cargo.toml" --bin "$BIN"
+            cargo build --release -q --manifest-path "$tree/Cargo.toml" --bin "$BIN" >&2 || return 1
     fi
     echo "$target/release/$BIN"
 }
@@ -51,8 +52,9 @@ seconds() { if [ "$BENCH" = synthetic ]; then sed -nE 's/^total .* ([0-9.]+) s$/
 echo "$BENCH: base $rev vs working tree, cpu $CPU, $ROUNDS rounds, load $(cut -d' ' -f1 /proc/loadavg)"
 best_base_all=""; best_new_all=""
 for layout in $LAYOUTS; do
-    a=$(build "$BASE_TREE" "$layout")
-    b=$(build "$ROOT" "$layout")
+    # A failed build must stop the run: timing a stale binary is worse than no number.
+    a=$(build "$BASE_TREE" "$layout") || { echo "base build failed" >&2; exit 1; }
+    b=$(build "$ROOT" "$layout") || { echo "working-tree build failed" >&2; exit 1; }
     best_a=""; best_b=""
     for _ in $(seq "$ROUNDS"); do
         for side in a b; do

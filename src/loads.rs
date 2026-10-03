@@ -9,18 +9,9 @@
 
 use crate::core::{Bus, GroupZero, Step, M68000};
 use crate::ea::{
-    by_kind, ea_kind, sign_extend_16, sign_extend_8, word_to_long, ABSL, ABSW, AN, DISP, DN,
+    by_kind_with, ea_kind, sign_extend_16, sign_extend_8, word_to_long, ABSL, ABSW, AN, DISP, DN,
     EA_KIND, IMM, IND, INDEX, PCDISP, PCINDEX, POSTINC, PREDEC,
 };
-
-/// MOVE's size field, bits 13-12 (PRM 4, MOVE): 01 byte, 11 word, 10 long.
-fn move_size(opcode: u16) -> usize {
-    match opcode >> 12 {
-        1 => 1,
-        3 => 2,
-        _ => 4,
-    }
-}
 
 impl<B: Bus> M68000<B> {
     /// MOVE -- destination <- source; N Z set, V C cleared (PRM 4-116; UM Tables 8-2, 8-3).
@@ -31,13 +22,19 @@ impl<B: Bus> M68000<B> {
     /// fault. WinUAE run agrees except that it leaves An alone when a word
     /// (An)+ faults: contested, the core follows the gate.
     pub(crate) fn op_move(&mut self, opcode: u16) -> Step {
-        by_kind!(ea_kind(opcode), op_move_from, self, opcode)
+        // MOVE's size field, bits 13-12 (PRM 4, MOVE): 01 byte, 11 word, 10 long.
+        let kind = ea_kind(opcode);
+        match opcode >> 12 {
+            1 => by_kind_with!(kind, 1, op_move_from, self, opcode),
+            3 => by_kind_with!(kind, 2, op_move_from, self, opcode),
+            _ => by_kind_with!(kind, 4, op_move_from, self, opcode),
+        }
     }
 
-    /// MOVE with its source kind known at compile time (`op_move`'s body).
+    /// MOVE with its source kind and size known at compile time (`op_move`'s body).
     #[inline(always)]
-    fn op_move_from<const SOURCE: u8>(&mut self, opcode: u16) -> Step {
-        let size = move_size(opcode);
+    fn op_move_from<const SOURCE: u8, const SIZE: usize>(&mut self, opcode: u16) -> Step {
+        let size = SIZE;
         let source = SOURCE;
         let value = self.ea_read(source, usize::from(opcode & 7), size)?;
         let kind = EA_KIND[usize::from(((opcode >> 3) & 0x38) | ((opcode >> 9) & 7))];
