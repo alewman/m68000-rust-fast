@@ -55,6 +55,7 @@ Measured and not kept (each A/B against the commit it would have followed):
 | fat LTO, one codegen unit | x0.972 | x0.951 | slower |
 | `execute()` inlined into `step()` | x0.909 | x0.967 | slower |
 | TST specialized on size as well as kind | x0.968 | x1.009 | slower on the main measure |
+| profile-guided optimization (`scripts/pgo.sh`: trained on the Genesis replay and the synthetic loops, System 16B held out), at `16e40a4` | held-out x0.978, both x0.996 | x1.139 (trained on them) | helps only the loops it was trained on; kept as an optional script, not the build |
 
 Through the full conformance host (bus-error and device range scans and the
 access log on every access, a state capture per boundary) the same replays
