@@ -31,8 +31,6 @@
 //!   the reference masks with `& 0xFFFFFFFF`, and `i64`/`u64` where it
 //!   compares an unmasked result.
 
-use crate::dispatch::Op;
-
 // -- status register (PRM 1.3.1) ----------------------------------------------
 pub const T: u16 = 0x8000; // trace
 pub const S: u16 = 0x2000; // supervisor
@@ -193,7 +191,6 @@ pub struct M68000<B: Bus> {
     pub halted: bool,
     /// E-clock phase (clock mod 10) at the last autovectored acknowledge.
     pub last_acknowledge_phase: u32,
-    pub(crate) table: &'static [Op; 0x10000],
 }
 
 impl<B: Bus> M68000<B> {

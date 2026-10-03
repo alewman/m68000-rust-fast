@@ -11,7 +11,7 @@ use crate::core::{
     Bus, BusError, Cycle, AUTOVECTOR, FC_CPU_SPACE, IPL_MASK, M68000, MASK24, S, SPURIOUS, T,
     VECTOR_AUTOVECTOR_BASE, VECTOR_SPURIOUS, VECTOR_TRACE, VECTOR_UNINITIALIZED,
 };
-use crate::dispatch::names;
+use crate::dispatch::NAMES;
 use crate::state::CpuState;
 
 /// Why [`M68000::set_pc`] refused to start.
@@ -49,7 +49,6 @@ impl<B: Bus> M68000<B> {
             stopped: false,
             halted: false,
             last_acknowledge_phase: 0,
-            table: names(),
         }
     }
 
@@ -225,6 +224,30 @@ impl<B: Bus> M68000<B> {
     /// edge, is taken (UM 6.3.2); a stopped CPU idles; otherwise the
     /// instruction in IR runs.
     pub fn step(&mut self) -> u32 {
+        // The fast path: not halted, no trace pending or traced, no
+        // interrupt acceptable, not stopped. One combined test instead of
+        // four in turn; everything else is step_slow, the reference's order.
+        let level = self.ipl;
+        let interrupt =
+            level != 0 && (u16::from(level) > (self.sr >> 8) & 7 || (level == 7 && self.nmi_edge));
+        if !(self.halted | self.trace_pending | self.stopped | interrupt) && self.sr & T == 0 {
+            self.cycles = 0;
+            let opcode = self.ir;
+            self.opcode = opcode;
+            self.fault_pc = self.pc.wrapping_sub(2);
+            if let Err(fault) = self.execute(NAMES[usize::from(opcode)], opcode) {
+                self.group_zero(fault);
+            }
+            self.clock += u64::from(self.cycles);
+            return self.cycles;
+        }
+        self.step_slow()
+    }
+
+    /// Everything `step()` does when its fast path does not apply.
+    #[cold]
+    #[inline(never)]
+    fn step_slow(&mut self) -> u32 {
         if self.halted {
             self.cycles = 4;
             self.clock += 4;
@@ -256,7 +279,7 @@ impl<B: Bus> M68000<B> {
             if traced {
                 self.untraced = false;
             }
-            let executed = self.execute(self.table[usize::from(opcode)], opcode);
+            let executed = self.execute(NAMES[usize::from(opcode)], opcode);
             if executed.is_ok() && traced && !self.untraced {
                 // Trace follows an instruction that completed, as its own
                 // boundary: the next step takes it (UM 6.3.8). An illegal or
