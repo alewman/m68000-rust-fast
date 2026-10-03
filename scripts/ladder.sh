@@ -14,6 +14,7 @@ start=$(date +%s)
 "$ROOT/scripts/rung2.sh" "$ROOT/external/m68000_test_vectors/v1" | tail -1
 "$ROOT/scripts/rung4.sh"
 "$ROOT/scripts/rung5.sh" "$REFERENCE" "$PY" | tail -1
+"$ROOT/scripts/rung6.sh" "$ROOT/external/680x0/68000/v1" "$REFERENCE" "$PYPY" | tail -1
 if [ "${SKIP3:-0}" != 1 ]; then
     for game in genesis altbeast; do
         "$ROOT/scripts/rung3.sh" "$ROOT/external/replay-$game/manifest.json" "$REFERENCE" "$PYPY" \

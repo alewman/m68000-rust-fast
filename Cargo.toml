@@ -14,11 +14,12 @@ name = "m68000_rust"
 [features]
 default = ["std"]
 # The trace producer, the conformance host and the binaries.
-std = ["dep:serde", "dep:serde_json"]
+std = ["dep:serde", "dep:serde_json", "dep:flate2"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
+flate2 = { version = "1", optional = true }
 
 [profile.release]
 debug = 1
@@ -41,4 +42,8 @@ required-features = ["std"]
 
 [[bin]]
 name = "m68k-replay-bench"
+required-features = ["std"]
+
+[[bin]]
+name = "m68k-680x0"
 required-features = ["std"]
