@@ -25,9 +25,15 @@ use m68000_rust::conformance::{load_manifest, trace_manifest, EventKind, Manifes
 use m68000_rust::trace::{next_boundary, BoundaryKind};
 use m68000_rust::{Bus, BusError, Cycle, M68000};
 
+/// 16 MiB and two spare bytes, so `a + 1` for a masked `a` is always in
+/// bounds and the compiler drops the check (word accesses are even, so the
+/// spare bytes are never read).
+const MEMORY: usize = (1 << 24) + 2;
+
 struct ReplayHost {
-    memory: Vec<u8>,
-    devices: Vec<(u32, u32)>,
+    memory: Box<[u8; MEMORY]>,
+    /// The manifest's one device window: start and length.
+    device: (u32, u32),
     reads: Vec<u16>,
     next: usize,
     tas_drop: bool,
@@ -36,9 +42,7 @@ struct ReplayHost {
 impl ReplayHost {
     #[inline]
     fn device(&self, address: u32) -> bool {
-        self.devices
-            .iter()
-            .any(|&(start, length)| address.wrapping_sub(start) < length)
+        address.wrapping_sub(self.device.0) < self.device.1
     }
 
     #[inline]
@@ -55,7 +59,7 @@ impl Bus for ReplayHost {
         if self.device(address) {
             return Ok(self.replayed() as u8);
         }
-        Ok(self.memory[address as usize])
+        Ok(self.memory[(address & 0xFF_FFFF) as usize])
     }
 
     #[inline]
@@ -63,17 +67,14 @@ impl Bus for ReplayHost {
         if self.device(address) {
             return Ok(self.replayed());
         }
-        let a = address as usize;
-        Ok(u16::from_be_bytes([
-            self.memory[a],
-            self.memory[(a + 1) & 0xFF_FFFF],
-        ]))
+        let a = (address & 0xFF_FFFF) as usize;
+        Ok(u16::from_be_bytes([self.memory[a], self.memory[a + 1]]))
     }
 
     #[inline]
     fn write_byte(&mut self, address: u32, value: u8, _cycle: Cycle) -> Result<(), BusError> {
         if !self.device(address) {
-            self.memory[address as usize] = value;
+            self.memory[(address & 0xFF_FFFF) as usize] = value;
         }
         Ok(())
     }
@@ -81,7 +82,7 @@ impl Bus for ReplayHost {
     #[inline]
     fn write_word(&mut self, address: u32, value: u16, _cycle: Cycle) -> Result<(), BusError> {
         if !self.device(address) {
-            let a = address as usize;
+            let a = (address & 0xFF_FFFF) as usize;
             let [high, low] = value.to_be_bytes();
             self.memory[a] = high;
             self.memory[(a + 1) & 0xFF_FFFF] = low;
@@ -100,14 +101,14 @@ impl Bus for ReplayHost {
 
 /// One bare run of `manifest` on the lean host: (instructions, clocks).
 fn run(manifest: &Manifest) -> (u64, u64) {
-    let mut memory = vec![0u8; 1 << 24];
+    let mut memory: Box<[u8; MEMORY]> = vec![0u8; MEMORY].into_boxed_slice().try_into().unwrap();
     for (address, data) in &manifest.memory {
         let start = *address as usize;
         memory[start..start + data.len()].copy_from_slice(data);
     }
     let host = ReplayHost {
         memory,
-        devices: manifest.devices.clone(),
+        device: manifest.devices[0],
         reads: manifest.reads.clone(),
         next: 0,
         tas_drop: manifest.tas_drop,
@@ -184,8 +185,8 @@ fn main() {
     for path in &manifests {
         let manifest = load_manifest(path).unwrap_or_else(|e| panic!("{e}"));
         assert!(
-            manifest.bus_error.is_empty() && manifest.at_pc.is_empty(),
-            "{}: the lean host covers replay manifests without bus errors or at_pc",
+            manifest.bus_error.is_empty() && manifest.at_pc.is_empty() && manifest.devices.len() == 1,
+            "{}: the lean host covers replay manifests with one device window and without bus errors or at_pc",
             path.display()
         );
         let mut best = f64::MAX;

@@ -30,8 +30,12 @@ rev=$(git -C "$ROOT" rev-parse --short "$BASE")
 if [ ! -d "$BASE_TREE" ]; then
     git -C "$ROOT" worktree add -q --detach "$BASE_TREE" "$rev"
 fi
-git -C "$BASE_TREE" checkout -q --detach "$rev"
+git -C "$BASE_TREE" checkout -q -f --detach "$rev"
 ln -sfn "$ROOT/external" "$BASE_TREE/external"
+# Both sides run the working tree's benchmark programs and hosts, so a base
+# from before a harness change is measured with the same harness; only the
+# core differs.
+cp "$ROOT/src/bin/m68k-replay-bench.rs" "$ROOT/src/bin/m68k-bench.rs" "$BASE_TREE/src/bin/"
 build() { # tree layout -> binary path
     local tree=$1 layout=$2 target
     target="$tree/target/ab-$layout"
