@@ -1,18 +1,61 @@
-# m68000-rust
+# m68000-rust-fast
 
-A Rust Motorola MC68000 instruction core transcribed from
-[m68000-python](https://github.com/alewman/m68000-python) and proven
-equivalent to it at every processor boundary: the boundary kind, the clocks,
-the instruction's address and bytes, all fourteen fields of `CPUState` before
-and after, and every bus access in order. Not merely "passes the corpus".
+A fast fork of [m68000-rust](https://github.com/alewman/m68000-rust), the
+Rust transcription of [m68000-python](https://github.com/alewman/m68000-python),
+that stays provably equivalent to the reference at every processor
+boundary: the same ladder, every rung, on every commit that touches `src/`.
+Each optimization is one commit with its measurement; a change that does
+not pay is reverted and recorded below as not kept.
 
-The module layout mirrors the reference so the two can be read side by
-side. Each `src/*.rs` file is the transcription of one `m68000_python`
-module (`core`, `ea`, `flags`, `alu`, `bcd`, `bits`, `control`, `loads`,
-`shifts`, `system`, `dispatch`, `state`, `cpu`), with the same handler
-names, the same opcode map built from the same `RULES`, and the hardware
-comments and their sources carried over. Nothing is redesigned; where the
-language forced a difference, the module header says what it is.
+The crate keeps the name `m68000_rust` and m68000-rust's API (`Bus`,
+`Cycle`, `M68000<B>`, `step()`, `reset()`, `set_ipl()`, `set_pc()`,
+`capture_state()`/`restore_state()`, `step_clocks`), so a host written for
+m68000-rust compiles unchanged. The core builds without `std`
+(`cargo build --no-default-features --lib`); the trace producer, the
+conformance host and the binaries are behind the default `std` feature.
+[docs/handoff-brief.md](docs/handoff-brief.md) is the request and its
+reading, [docs/build-record.md](docs/build-record.md) what happened.
+
+## Speed
+
+The measure is `m68k-replay-bench`: the two MAME game replays of rung 3
+(Genesis and System 16B Altered Beast, 52,850,830 instructions, interrupts
+and device reads included) stepped bare on a lean host. The secondary
+measure is `m68k-bench`, the reference's four synthetic workloads (copy
+loop, memory, arithmetic, exceptions), so no change is judged on the
+replays alone: 70% of the replays' instructions are one busy-wait shape
+(`tst.w`/`move.w` of an absolute short address, then Bcc).
+
+Every number below is from `scripts/ab.sh`: the base commit and the
+candidate built under three code layouts (64- and 32-byte branch-target
+alignment and none, z80-rust-fast's method) and run alternately on one core
+of a shared i9-13900K, best of 5 or 7 each. The machine's load moved between
+4 and 17 during this work, which makes separate runs incomparable; run
+alternately, both sides see the same load. The ratio is the result.
+
+| Commit | Change | Replays (min over layouts) | Synthetic |
+| --- | --- | ---: | ---: |
+| `60e7567` | baseline: the transcription, the build-time opcode table, the lean bench host | 0.462 s, 114.5 M instr/s | -- |
+| `1b8dbbb` | `step()`: one combined test for the common case, the rest `#[cold]` | x1.110 | (not measured: the synthetic total line came after) |
+| `0ce1db4` | inline the addressing-mode helpers, the sized read and the refills | x1.099 | x1.051 |
+| `67c0972` | MOVE and TST specialized on the source addressing kind (const generic) | x1.082 | x1.009 |
+| | **at `67c0972` against the baseline** | **x1.314: 0.354 s, 149 M instr/s** | x1.060 against `ef71d07` |
+
+Measured and not kept (each A/B against the commit it would have followed):
+
+| Change | Replays | Synthetic | Why not |
+| --- | ---: | ---: | --- |
+| a compile-time table of handler function pointers per host type | -- | -- | const evaluation of 65,536 pointers ran over ten minutes |
+| inlining only `extension`, `prefetch`, `jump` | x1.017 | x1.000 | below the noise |
+| `GroupZero` packed into a `NonZeroU64`, so `Step` returns in a register | x0.933 | x1.025 | slower on the main measure |
+| inlining `jump`, `read_program_word` and the bus read helpers as well | x0.982 | x0.959 | slower |
+| ADD/SUB/AND/OR, CMP, CMPI, ADDQ/SUBQ, the unary group, MOVEA, LEA specialized like MOVE | x0.972 | x1.017 | slower on the main measure (code growth) |
+| fat LTO, one codegen unit | x0.972 | x0.951 | slower |
+
+Through the full conformance host (bus-error and device range scans and the
+access log on every access, a state capture per boundary) the same replays
+took 0.744 s at the baseline; that host is for proving equivalence, not for
+speed, and is unchanged.
 
 ## Certification
 
@@ -25,7 +68,7 @@ Pinned oracles, as m68000-python's `docs/conformance.md` requires:
 | SingleStepTests/m68000 corpus | revision `64b253116a3de04aaac4346c43680960dc9b67e5` |
 | flamewing/68k-bcd-verifier | commit `39a01be528b0744302bf1dc9b3463fc22a3fc45f`, table SHA-256 `8432868c…80147e5` |
 
-Ladder status at this commit, each rung reproduced with the script named
+Ladder status at `67c0972` (and on every commit above, by `scripts/ladder.sh`), each rung reproduced with the script named
 (`scripts/`) on Linux x86_64 with rustc 1.93.1, CPython 3.14.4 and PyPy
 7.3.20 / Python 3.11.13:
 
@@ -124,29 +167,13 @@ divergence between the two cores was found at any rung.
 - `m68k-vectors <dir>`: the SingleStepTests/m68000 runner (rung 2).
 - `m68k-bcd [table]`: the BCD table check (rung 4).
 - `m68k-bench`: the reference's four benchmark workloads.
+- `m68k-replay-bench [--check]`: the replays on a lean host, the speed
+  measure; `--check` requires the same counts as the conformance host.
 
-## Speed
-
-`m68k-bench` runs the reference's benchmark programs through `step()`, one
-process pinned to one core of an i9-13900K that was also running other
-people's jobs (2026-10-02):
-
-| Workload | m68000-rust | m68000-python, PyPy 7.3.20 | m68000-python, CPython 3.14.4 |
-| --- | ---: | ---: | ---: |
-| base (a copy loop through (An)+, DBF) | 156 M instr/s | 32.9 M | 1.39 M |
-| memory (long moves, MOVEM, PEA) | 101 M | 18.7 M | 0.65 M |
-| arithmetic (MULU, DIVU, shifts, ABCD) | 157 M | 19.1 M | 1.18 M |
-| exceptions (TRAP #0, RTE) | 157 M | 33.5 M | 1.32 M |
-
-The reference's columns are its own record (its `docs/validation.md`,
-"Speed"); this is a transcription, not an optimised core, and speed is the
-job of a `-fast` fork, as z80-rust-fast is for the Z80.
-
-## Where the brief is
-
-[docs/handoff-brief.md](docs/handoff-brief.md) is the request this
-repository was built from and the plan read from it, and
-[docs/build-record.md](docs/build-record.md) is what happened.
+Scripts beyond the rungs: `scripts/ladder.sh` (every rung, about 6.5
+minutes), `scripts/ab.sh BASE` (the A/B above; `BENCH=synthetic` for the
+secondary measure), `scripts/bench.sh` (absolute numbers under three
+layouts, for a quiet machine).
 
 ## License
 
