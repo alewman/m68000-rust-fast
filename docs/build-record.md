@@ -25,3 +25,20 @@ to 17 during the session). The commit messages carry each measurement.
 - **Ladder:** rungs 1-5 clean on every kept commit, rung 3 included.
 - **Tool note:** a `pkill -f` on a cargo pattern killed the session's own
   shell (exit 144), as the workspace notes warn; stop builds by PID.
+
+## 2026-10-03: the optimization project resumed
+
+- Merged m68000-rust's rung 6 and pin; the fork's ladder runs all six
+  rungs (about 7 minutes) and is clean on every kept commit.
+- The bench host again dominated `jump()`'s profile; it now decodes one
+  device window and indexes a fixed array (`9b443fe`), and `ab.sh` gives
+  both sides the same harness. Against the fork's baseline with that
+  harness the earlier work measured x1.313 (replays), x1.207 (synthetic).
+- Kept: MOVE specialized on size (x1.054). Not kept, each measured:
+  `execute` inlined into `step`, TST on size, PGO (helps only what it was
+  trained on), the fault record in the CPU with an empty error type (the
+  dispatch redesign's cheap form: x1.000), the hot handlers inlined into
+  dispatch, every handler out of line.
+- `ab.sh` once timed stale binaries after a failed build; it now stops on a
+  build failure, and those numbers were discarded.
+- Final: x1.384 replays, x1.217 synthetic against `60e7567`, same harness.

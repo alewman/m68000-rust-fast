@@ -55,7 +55,21 @@ Measured and not kept (each A/B against the commit it would have followed):
 | fat LTO, one codegen unit | x0.972 | x0.951 | slower |
 | `execute()` inlined into `step()` | x0.909 | x0.967 | slower |
 | TST specialized on size as well as kind | x0.968 | x1.009 | slower on the main measure |
+| the fault's details kept in the CPU and an empty error type, so every `Result` returns in registers | x1.000 | x0.958 | no gain: returning through memory was not the cost |
+| Bcc, MOVE and TST inlined into the dispatch `match` | x0.887 | x0.935 | slower |
+| every handler forced out of line (the dispatch a bare jump table) | x0.993 | x1.000 | no gain |
 | profile-guided optimization (`scripts/pgo.sh`: trained on the Genesis replay and the synthetic loops, System 16B held out), at `16e40a4` | held-out x0.978, both x0.996 | x1.139 (trained on them) | helps only the loops it was trained on; kept as an optional script, not the build |
+
+**Where it stands.** At `ec30440` the replays run at about 191 M
+instructions/s, roughly 29 machine cycles per emulated instruction with the
+host included. Bcc's taken path is about 40 machine instructions, most of
+them its two queue reads. The last experiments, which attacked dispatch and
+call overhead from every side, were all neutral or slower: what remains is
+each instruction's own bus accesses, flags, and the prefetch-queue and
+clock bookkeeping the conformance contract requires at every boundary.
+Going much further would mean a different kind of core (decoded-block
+caching or translation), which would have to keep producing every
+boundary and every access's `step_clocks` to stay on the ladder.
 
 Through the full conformance host (bus-error and device range scans and the
 access log on every access, a state capture per boundary) the same replays
