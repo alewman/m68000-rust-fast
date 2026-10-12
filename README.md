@@ -16,6 +16,14 @@ conformance host and the binaries are behind the default `std` feature.
 [docs/handoff-brief.md](docs/handoff-brief.md) is the request and its
 reading, [docs/build-record.md](docs/build-record.md) what happened.
 
+It includes m68000-rust's two board hooks (`Cycle::irc` and
+`Bus::acknowledge_clock_credit`, m68000-rust `ce3b489`), merged in with the whole
+ladder clean afterwards. megadrive-rust-fast, the speed fork of the Mega Drive board
+[megadrive-rust](https://github.com/alewman/megadrive-rust), runs on it: 37 of 37 lockstep cases identical to
+upstream megadrive-rust, and x1.018 over the board on m68000-rust. In a whole Mega
+Drive the 68000's time is mostly the board's bus cycles around the core, so this
+core's own x1.384 shows as a couple of percent there.
+
 ## Speed
 
 The measure is `m68k-replay-bench`: the two MAME game replays of rung 3

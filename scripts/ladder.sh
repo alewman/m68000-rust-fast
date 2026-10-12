@@ -6,8 +6,8 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 REFERENCE=${REFERENCE:-"$ROOT/external/m68000-python"}
-PY=${PY:-/data/emu/m68000-python/.venv/bin/python}
-PYPY=${PYPY:-/data/emu/m68000-python/.venv-pypy/bin/pypy3}
+PY=${PY:-"$REFERENCE/.venv/bin/python"}
+PYPY=${PYPY:-"$REFERENCE/.venv-pypy/bin/pypy3"}
 echo "commit $(git -C "$ROOT" rev-parse --short HEAD), reference $(git -C "$REFERENCE" rev-parse --short HEAD)"
 start=$(date +%s)
 "$ROOT/scripts/rung1.sh" "$REFERENCE" "$PY"
