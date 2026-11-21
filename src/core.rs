@@ -32,8 +32,6 @@
 //!   the reference masks with `& 0xFFFFFFFF`, and `i64`/`u64` where it
 //!   compares an unmasked result.
 
-use crate::dispatch::Op;
-
 // -- status register (PRM 1.3.1) ----------------------------------------------
 pub const T: u16 = 0x8000; // trace
 pub const S: u16 = 0x2000; // supervisor
@@ -209,7 +207,6 @@ pub struct M68000<B: Bus> {
     pub halted: bool,
     /// E-clock phase (clock mod 10) at the last autovectored acknowledge.
     pub last_acknowledge_phase: u32,
-    pub(crate) table: &'static [Op; 0x10000],
 }
 
 impl<B: Bus> M68000<B> {
@@ -241,7 +238,7 @@ impl<B: Bus> M68000<B> {
     pub(crate) fn set_sr_internal(&mut self, value: u16) {
         let value = value & SR_BITS;
         if (value ^ self.sr) & S != 0 {
-            std::mem::swap(&mut self.r[15], &mut self.other_sp);
+            ::core::mem::swap(&mut self.r[15], &mut self.other_sp);
         }
         self.sr = value;
     }
@@ -366,6 +363,7 @@ impl<B: Bus> M68000<B> {
         self.write_word(address, value >> 16)
     }
 
+    #[inline(always)]
     pub(crate) fn read(&mut self, size: usize, address: u32) -> Result<u32, GroupZero> {
         if size == 2 {
             return self.read_word(address);
@@ -444,6 +442,7 @@ impl<B: Bus> M68000<B> {
     // refills add 2.
 
     /// Take the extension word waiting in IRC and refill IRC from pc.
+    #[inline(always)]
     pub(crate) fn extension(&mut self) -> Result<u32, GroupZero> {
         let value = u32::from(self.irc);
         let address = self.pc;
@@ -465,6 +464,7 @@ impl<B: Bus> M68000<B> {
     ///
     /// The opcode of the next instruction is then in IR and its first
     /// extension word in IRC (UM "Prefetch"; corpus `prefetch` pair).
+    #[inline(always)]
     pub(crate) fn prefetch(&mut self) -> Step {
         let address = self.pc;
         self.fault_pc = address;

@@ -1,4 +1,4 @@
-m68000-rust
+m68000-rust-fast
 Copyright (c) 2026 alewman. Licensed under the MIT License (LICENSE).
 
 No third-party code is included. A transcription of m68000-python (MIT, same

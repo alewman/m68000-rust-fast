@@ -1,0 +1,19 @@
+[package]
+name = "m68000-wasm-check"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Runs the BCD rung and rungs 1 and 5 inside WebAssembly (scripts/wasm-check.sh)"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+m68000-rust-fast = { path = ".." }
+serde_json = "1"
+
+[profile.release]
+panic = "abort"
+
+# Not a member of the parent's workspace: built only for wasm32.
+[workspace]

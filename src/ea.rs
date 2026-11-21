@@ -20,77 +20,54 @@
 
 use crate::core::{Bus, GroupZero, M68000, MASK};
 
-// The twelve kinds, in PRM 2.2 order.
-pub const DN: u8 = 0; // Dn                data register direct
-pub const AN: u8 = 1; // An                address register direct
-pub const IND: u8 = 2; // (An)              address register indirect
-pub const POSTINC: u8 = 3; // (An)+        indirect with postincrement
-pub const PREDEC: u8 = 4; // -(An)         indirect with predecrement
-pub const DISP: u8 = 5; // (d16,An)        indirect with displacement
-pub const INDEX: u8 = 6; // (d8,An,Xn)     indirect with index
-pub const ABSW: u8 = 7; // (xxx).W        absolute short
-pub const ABSL: u8 = 8; // (xxx).L        absolute long
-pub const PCDISP: u8 = 9; // (d16,PC)      program counter with displacement
-pub const PCINDEX: u8 = 10; // (d8,PC,Xn)  program counter with index
-pub const IMM: u8 = 11; // #<data>         immediate
-/// Mode 7 registers 5-7: no addressing mode (the reference's `None`).
-pub const NONE: u8 = 0xFF;
+pub use crate::ea_kinds::*;
 
-const fn kind(field: usize) -> u8 {
-    let mode = field >> 3;
-    let register = field & 7;
-    if mode < 7 {
-        return mode as u8;
-    }
-    [ABSW, ABSL, PCDISP, PCINDEX, IMM, NONE, NONE, NONE][register]
+/// Call `$call::<KIND>` with the run-time `$kind` as a const generic, so a
+/// handler specialized on its addressing kind is monomorphized once per kind
+/// and its mode decode folds away. `$kind` is never NONE: the opcode map
+/// sends no word with an invalid EA to a handler that specializes.
+macro_rules! by_kind {
+    ($kind:expr, $call:ident, $self:ident, $($argument:expr),*) => {
+        match $kind {
+            0 => $self.$call::<0>($($argument),*),
+            1 => $self.$call::<1>($($argument),*),
+            2 => $self.$call::<2>($($argument),*),
+            3 => $self.$call::<3>($($argument),*),
+            4 => $self.$call::<4>($($argument),*),
+            5 => $self.$call::<5>($($argument),*),
+            6 => $self.$call::<6>($($argument),*),
+            7 => $self.$call::<7>($($argument),*),
+            8 => $self.$call::<8>($($argument),*),
+            9 => $self.$call::<9>($($argument),*),
+            10 => $self.$call::<10>($($argument),*),
+            11 => $self.$call::<11>($($argument),*),
+            _ => unreachable!("no addressing kind"),
+        }
+    };
 }
+pub(crate) use by_kind;
 
-const fn kinds() -> [u8; 64] {
-    let mut table = [0u8; 64];
-    let mut field = 0;
-    while field < 64 {
-        table[field] = kind(field);
-        field += 1;
-    }
-    table
+/// `by_kind!` with a second const argument after the kind.
+macro_rules! by_kind_with {
+    ($kind:expr, $extra:expr, $call:ident, $self:ident, $($argument:expr),*) => {
+        match $kind {
+            0 => $self.$call::<0, $extra>($($argument),*),
+            1 => $self.$call::<1, $extra>($($argument),*),
+            2 => $self.$call::<2, $extra>($($argument),*),
+            3 => $self.$call::<3, $extra>($($argument),*),
+            4 => $self.$call::<4, $extra>($($argument),*),
+            5 => $self.$call::<5, $extra>($($argument),*),
+            6 => $self.$call::<6, $extra>($($argument),*),
+            7 => $self.$call::<7, $extra>($($argument),*),
+            8 => $self.$call::<8, $extra>($($argument),*),
+            9 => $self.$call::<9, $extra>($($argument),*),
+            10 => $self.$call::<10, $extra>($($argument),*),
+            11 => $self.$call::<11, $extra>($($argument),*),
+            _ => unreachable!("no addressing kind"),
+        }
+    };
 }
-
-/// EA field (bits 5-0) -> kind, or [`NONE`] for mode 7 registers 5-7 (illegal).
-pub const EA_KIND: [u8; 64] = kinds();
-
-/// The kind of the EA field in the low six bits of `opcode`.
-#[inline]
-pub fn ea_kind(opcode: u16) -> u8 {
-    EA_KIND[usize::from(opcode & 0x3F)]
-}
-
-/// A set of kinds: bit n set means kind n is in the set.
-pub type Category = u16;
-
-const fn set(kinds: &[u8]) -> Category {
-    let mut bits = 0;
-    let mut index = 0;
-    while index < kinds.len() {
-        bits |= 1 << kinds[index];
-        index += 1;
-    }
-    bits
-}
-
-// The addressing categories of PRM Table 2-4, as sets of kinds.
-pub const ALL: Category = 0x0FFF;
-pub const DATA: Category = ALL & !set(&[AN]);
-pub const MEMORY: Category = ALL & !set(&[DN, AN]);
-pub const CONTROL: Category = set(&[IND, DISP, INDEX, ABSW, ABSL, PCDISP, PCINDEX]);
-pub const ALTERABLE: Category = set(&[DN, AN, IND, POSTINC, PREDEC, DISP, INDEX, ABSW, ABSL]);
-pub const DATA_ALTERABLE: Category = DATA & ALTERABLE;
-pub const MEMORY_ALTERABLE: Category = MEMORY & ALTERABLE;
-
-/// Whether `kind` (possibly [`NONE`]) is in `category`.
-#[inline]
-pub fn within(kind: u8, category: Category) -> bool {
-    kind != NONE && category & (1 << kind) != 0
-}
+pub(crate) use by_kind_with;
 
 pub fn sign_extend_8(value: u32) -> i32 {
     i32::from(value as u8 as i8)
@@ -140,6 +117,7 @@ impl<B: Bus> M68000<B> {
     ///
     /// The standard source-operand sequence: the one TST, CMP, ADD <ea>,Dn
     /// and the read half of a read-modify-write use.
+    #[inline(always)]
     pub(crate) fn ea_address(
         &mut self,
         kind: u8,
@@ -190,6 +168,7 @@ impl<B: Bus> M68000<B> {
     }
 
     /// Fetch a source operand of any kind (UM Table 8-1).
+    #[inline(always)]
     pub(crate) fn ea_read(
         &mut self,
         kind: u8,
@@ -213,6 +192,7 @@ impl<B: Bus> M68000<B> {
     /// Address and value of a memory operand: the read half of every access.
     ///
     /// PC-relative operands are read in program space (FC 2/6, UM Table 3-2).
+    #[inline(always)]
     pub(crate) fn ea_fetch(
         &mut self,
         kind: u8,

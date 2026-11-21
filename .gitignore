@@ -2,6 +2,7 @@
 *.jsonl
 !/tests/data/**/*.jsonl
 /external/
+/wasm-check/target/
 
 # Code removed unread in the 2026-11-19 provenance rewrite (docs/provenance.md).
 /trash/

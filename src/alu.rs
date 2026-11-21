@@ -22,7 +22,7 @@
 //! [`UnaryOperation`].
 
 use crate::core::{Bus, BusError, GroupZero, Step, M68000, MASK, N, V, VECTOR_BUS_ERROR, X, Z};
-use crate::ea::{ea_kind, sign_extend_16, word_to_long, AN, DN, IMM};
+use crate::ea::{by_kind, ea_kind, sign_extend_16, word_to_long, AN, DN, IMM};
 
 /// Bits 7-6 of the common size field (PRM Section 8): 00 byte, 01 word, 10 long.
 pub const SIZE: [usize; 4] = [1, 2, 4, 0];
@@ -50,7 +50,8 @@ pub fn multiply_signed_clocks(source: u32) -> u32 {
     38 + 2 * ((pattern ^ (pattern >> 1)) & 0xFFFF).count_ones()
 }
 
-// The divide clocks, transcribed from m68000-python's `_alu.py` as rewritten
+// The divide clocks, transcribed from m68000-python's `_alu.py` (through
+// m68000-rust's `src/alu.rs`) as rewritten
 // on 2026-11-19 from permitted sources only (docs/provenance.md). UM Table
 // 8-4 gives only the maxima, 140 (DIVU) and 158 (DIVS) for a register
 // source, and says the time depends on the data (DOC). The per-step costs
@@ -616,8 +617,14 @@ impl<B: Bus> M68000<B> {
 
     /// TST -- set N Z from the operand; V C cleared (PRM 4-192; UM Table 8-6).
     pub(crate) fn op_tst(&mut self, opcode: u16) -> Step {
+        by_kind!(ea_kind(opcode), op_tst_of, self, opcode)
+    }
+
+    /// TST with its operand kind known at compile time (`op_tst`'s body).
+    #[inline(always)]
+    fn op_tst_of<const KIND: u8>(&mut self, opcode: u16) -> Step {
         let size = size_of(opcode);
-        let value = self.ea_read(ea_kind(opcode), usize::from(opcode & 7), size)?;
+        let value = self.ea_read(KIND, usize::from(opcode & 7), size)?;
         self.flags_logic(value, size);
         self.prefetch()
     }

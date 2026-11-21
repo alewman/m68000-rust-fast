@@ -1,18 +1,88 @@
-# m68000-rust
+# m68000-rust-fast
 
-A Rust Motorola MC68000 instruction core transcribed from
-[m68000-python](https://github.com/alewman/m68000-python) and proven
-equivalent to it at every processor boundary: the boundary kind, the clocks,
-the instruction's address and bytes, all fourteen fields of `CPUState` before
-and after, and every bus access in order. Not merely "passes the corpus".
+A fast fork of [m68000-rust](https://github.com/alewman/m68000-rust), the
+Rust transcription of [m68000-python](https://github.com/alewman/m68000-python),
+that stays provably equivalent to the reference at every processor
+boundary: the same ladder, every rung, on every commit that touches `src/`.
+Each optimization is one commit with its measurement; a change that does
+not pay is reverted and recorded below as not kept.
 
-The module layout mirrors the reference so the two can be read side by
-side. Each `src/*.rs` file is the transcription of one `m68000_python`
-module (`core`, `ea`, `flags`, `alu`, `bcd`, `bits`, `control`, `loads`,
-`shifts`, `system`, `dispatch`, `state`, `cpu`), with the same handler
-names, the same opcode map built from the same `RULES`, and the hardware
-comments and their sources carried over. Nothing is redesigned; where the
-language forced a difference, the module header says what it is.
+The crate keeps the name `m68000_rust` and m68000-rust's API (`Bus`,
+`Cycle`, `M68000<B>`, `step()`, `reset()`, `set_ipl()`, `set_pc()`,
+`capture_state()`/`restore_state()`, `step_clocks`), so a host written for
+m68000-rust compiles unchanged. The core builds without `std`
+(`cargo build --no-default-features --lib`); the trace producer, the
+conformance host and the binaries are behind the default `std` feature.
+[docs/handoff-brief.md](docs/handoff-brief.md) is the request and its
+reading, [docs/build-record.md](docs/build-record.md) what happened.
+
+It includes m68000-rust's two board hooks (`Cycle::irc` and
+`Bus::acknowledge_clock_credit`, m68000-rust `ce3b489`), merged in with the whole
+ladder clean afterwards. megadrive-rust-fast, the speed fork of the Mega Drive board
+[megadrive-rust](https://github.com/alewman/megadrive-rust), runs on it: 37 of 37 lockstep cases identical to
+upstream megadrive-rust, and x1.018 over the board on m68000-rust. In a whole Mega
+Drive the 68000's time is mostly the board's bus cycles around the core, so this
+core's own x1.384 shows as a couple of percent there.
+
+## Speed
+
+The measure is `m68k-replay-bench`: the two MAME game replays of rung 3
+(Genesis and System 16B Altered Beast, 52,850,830 instructions, interrupts
+and device reads included) stepped bare on a lean host. The secondary
+measure is `m68k-bench`, the reference's four synthetic workloads (copy
+loop, memory, arithmetic, exceptions), so no change is judged on the
+replays alone: 70% of the replays' instructions are one busy-wait shape
+(`tst.w`/`move.w` of an absolute short address, then Bcc).
+
+Every number below is from `scripts/ab.sh`: the base commit and the
+candidate built under three code layouts (64- and 32-byte branch-target
+alignment and none, z80-rust-fast's method) and run alternately on one core
+of a shared i9-13900K, best of 5 or 7 each. The machine's load moved between
+4 and 17 during this work, which makes separate runs incomparable; run
+alternately, both sides see the same load. The ratio is the result.
+
+| Commit | Change | Replays (min over layouts) | Synthetic |
+| --- | --- | ---: | ---: |
+| `60e7567` | baseline: the transcription and the build-time opcode table (0.462 s on the first lean host; 0.382 s on the current one) | -- | -- |
+| `1b8dbbb` | `step()`: one combined test for the common case, the rest `#[cold]` | x1.110 | (not measured: the synthetic total line came after) |
+| `0ce1db4` | inline the addressing-mode helpers, the sized read and the refills | x1.099 | x1.051 |
+| `67c0972` | MOVE and TST specialized on the source addressing kind (const generic) | x1.082 | x1.009 |
+| `9b443fe` | bench host: one device-window compare and a fixed-size memory (a harness change: every row is re-measurable with the same harness, since `ab.sh` copies the current bench into the base) | at this commit 0.287 s, 184 M instr/s; against `60e7567` with this harness x1.313 | x1.207 against `60e7567` |
+| `ec30440` | MOVE specialized on its size as well as its source kind (36 instances) | x1.054 | x1.009 |
+| | **at `ec30440` against `60e7567`, same harness** | **x1.384: 0.382 s to 0.276 s, 191 M instr/s** | **x1.217** |
+
+Measured and not kept (each A/B against the commit it would have followed):
+
+| Change | Replays | Synthetic | Why not |
+| --- | ---: | ---: | --- |
+| a compile-time table of handler function pointers per host type | -- | -- | const evaluation of 65,536 pointers ran over ten minutes |
+| inlining only `extension`, `prefetch`, `jump` | x1.017 | x1.000 | below the noise |
+| `GroupZero` packed into a `NonZeroU64`, so `Step` returns in a register | x0.933 | x1.025 | slower on the main measure |
+| inlining `jump`, `read_program_word` and the bus read helpers as well | x0.982 | x0.959 | slower |
+| ADD/SUB/AND/OR, CMP, CMPI, ADDQ/SUBQ, the unary group, MOVEA, LEA specialized like MOVE | x0.972 | x1.017 | slower on the main measure (code growth) |
+| fat LTO, one codegen unit | x0.972 | x0.951 | slower |
+| `execute()` inlined into `step()` | x0.909 | x0.967 | slower |
+| TST specialized on size as well as kind | x0.968 | x1.009 | slower on the main measure |
+| the fault's details kept in the CPU and an empty error type, so every `Result` returns in registers | x1.000 | x0.958 | no gain: returning through memory was not the cost |
+| Bcc, MOVE and TST inlined into the dispatch `match` | x0.887 | x0.935 | slower |
+| every handler forced out of line (the dispatch a bare jump table) | x0.993 | x1.000 | no gain |
+| profile-guided optimization (`scripts/pgo.sh`: trained on the Genesis replay and the synthetic loops, System 16B held out), at `16e40a4` | held-out x0.978, both x0.996 | x1.139 (trained on them) | helps only the loops it was trained on; kept as an optional script, not the build |
+
+**Where it stands.** At `ec30440` the replays run at about 191 M
+instructions/s, roughly 29 machine cycles per emulated instruction with the
+host included. Bcc's taken path is about 40 machine instructions, most of
+them its two queue reads. The last experiments, which attacked dispatch and
+call overhead from every side, were all neutral or slower: what remains is
+each instruction's own bus accesses, flags, and the prefetch-queue and
+clock bookkeeping the conformance contract requires at every boundary.
+Going much further would mean a different kind of core (decoded-block
+caching or translation), which would have to keep producing every
+boundary and every access's `step_clocks` to stay on the ladder.
+
+Through the full conformance host (bus-error and device range scans and the
+access log on every access, a state capture per boundary) the same replays
+took 0.744 s at the baseline; that host is for proving equivalence, not for
+speed, and is unchanged.
 
 ## Certification
 
@@ -20,13 +90,13 @@ Pinned oracles, as m68000-python's `docs/conformance.md` requires:
 
 | What | Version |
 | --- | --- |
-| m68000-python (reference core and conformance kit) | commit `27c3792` (2026-11-19, wave 2's second pass: nothing rests on MAME's header-less microcode files; [docs/provenance.md](docs/provenance.md)); before that `7b11f4d` (the rewrite of the divide clocks and divide-by-zero flags), and before that 0.1.0 plus the conformance kit at commit `b3df005` (branch `conformance-kit`, [m68000-python#5](https://github.com/alewman/m68000-python/pull/5): main `38dbd0f` + the kit + the reader fix this port found) |
+| m68000-python (reference core and conformance kit) | commit `27c3792` (2026-11-19, wave 2's second pass: nothing rests on MAME's header-less microcode files; ladder clean there, [docs/provenance.md](docs/provenance.md)); before that `7b11f4d` (the rewrite of the divide clocks and divide-by-zero flags), and before that 0.1.0 plus the conformance kit at commit `b3df005` (branch `conformance-kit`, [m68000-python#5](https://github.com/alewman/m68000-python/pull/5): main `38dbd0f` + the kit + the reader fix this port found) |
 | Trace schema | version 1 |
 | SingleStepTests/m68000 corpus | revision `64b253116a3de04aaac4346c43680960dc9b67e5` |
 | SingleStepTests/680x0 (rung 6, a detector) | revision `e0d5ece9670205cc84a0101081837deb446f86a3`, the `68000/v1` files |
 | flamewing/68k-bcd-verifier | commit `39a01be528b0744302bf1dc9b3463fc22a3fc45f`, table SHA-256 `8432868c…80147e5` |
 
-Ladder status at this commit, each rung reproduced with the script named
+Ladder status at `67c0972` (and on every commit above, by `scripts/ladder.sh`), each rung reproduced with the script named
 (`scripts/`) on Linux x86_64 with rustc 1.93.1, CPython 3.14.4 and PyPy
 7.3.20 / Python 3.11.13:
 
@@ -68,6 +138,25 @@ scripts/rung5.sh
 scripts/fetch_680x0.sh               # SingleStepTests/680x0 (68000/v1) at the pinned revision
 scripts/rung6.sh
 ```
+
+## On WebAssembly (phones and browsers)
+
+The core builds `no_std` for `wasm32-unknown-unknown`, and
+`scripts/wasm-check.sh` proves it there rather than assuming the native
+results carry over: it builds `wasm-check/` (a 0.9 MB module with every
+manifest and reference trace of `tests/data` built in) and runs it under
+Node. Inside WebAssembly, at `v0.1.0` (2026-10-03):
+
+| Check | Result |
+| --- | --- |
+| Rung 4: ABCD, SBCD, NBCD over every input against flamewing's hardware-verified table (SHA-256) | all 525,312 inputs agree |
+| Rungs 1 and 5: the 3 example and 20 interrupt manifests, each record against the reference trace | 23 of 23 match |
+| The reference's "base" benchmark loop | about 112 M instr/s under Node 22 on the i9 (native: 134 M) |
+
+Two extra clocks on every taken Bcc make `flags-and-branches` fail and the
+script exit 1, so the check bites. Rungs 2, 3 and 6 run natively only; the
+module runs the same source. A phone will be slower than this desktop; how
+much is what testing there will show.
 
 ## Using the core
 
@@ -130,29 +219,14 @@ divergence between the two cores was found at any rung.
 - `m68k-bcd [table]`: the BCD table check (rung 4).
 - `m68k-680x0 <dir>`: the 680x0 corpus classified as the reference classifies it (rung 6).
 - `m68k-bench`: the reference's four benchmark workloads.
+- `scripts/wasm-check.sh`: the WebAssembly check above.
+- `m68k-replay-bench [--check]`: the replays on a lean host, the speed
+  measure; `--check` requires the same counts as the conformance host.
 
-## Speed
-
-`m68k-bench` runs the reference's benchmark programs through `step()`, one
-process pinned to one core of an i9-13900K that was also running other
-people's jobs (2026-10-02):
-
-| Workload | m68000-rust | m68000-python, PyPy 7.3.20 | m68000-python, CPython 3.14.4 |
-| --- | ---: | ---: | ---: |
-| base (a copy loop through (An)+, DBF) | 156 M instr/s | 32.9 M | 1.39 M |
-| memory (long moves, MOVEM, PEA) | 101 M | 18.7 M | 0.65 M |
-| arithmetic (MULU, DIVU, shifts, ABCD) | 157 M | 19.1 M | 1.18 M |
-| exceptions (TRAP #0, RTE) | 157 M | 33.5 M | 1.32 M |
-
-The reference's columns are its own record (its `docs/validation.md`,
-"Speed"); this is a transcription, not an optimised core, and speed is the
-job of a `-fast` fork, as z80-rust-fast is for the Z80.
-
-## Where the brief is
-
-[docs/handoff-brief.md](docs/handoff-brief.md) is the request this
-repository was built from and the plan read from it, and
-[docs/build-record.md](docs/build-record.md) is what happened.
+Scripts beyond the rungs: `scripts/ladder.sh` (every rung, about 6.5
+minutes), `scripts/ab.sh BASE` (the A/B above; `BENCH=synthetic` for the
+secondary measure), `scripts/bench.sh` (absolute numbers under three
+layouts, for a quiet machine).
 
 ## License
 
